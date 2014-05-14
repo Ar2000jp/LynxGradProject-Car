@@ -7,6 +7,7 @@
 #include "myserial.h"
 #include "radio.h"
 #include "globals.h"
+#include "rtc.h"
 
 class Debug
 {
@@ -24,6 +25,7 @@ private:
     static Buzzer s_Buzzer;
     static Alarm s_Alarm;
     static Radio s_Radio;
+    static RTC s_RTC;
 
 };
 

@@ -3,6 +3,10 @@
 
 #include <Arduino.h>
 
+unsigned long Voltmeter::s_PrevTime = 0;
+bool Voltmeter::s_State = false;
+bool Voltmeter::s_Debouncing = false;
+
 Voltmeter::Voltmeter()
 {
     pinMode(c_VoltmeterPin, INPUT);

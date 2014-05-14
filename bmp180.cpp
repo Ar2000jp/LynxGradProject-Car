@@ -42,26 +42,34 @@ void BMP180::run()
         chThdSleepMilliseconds(400);
         waitTime = s_BMP180.startTemperature();
         if (waitTime == 0) {
+#ifdef DEBUG
             Serial.println("BMP180 start temp. error");
+#endif
             continue;
         }
         chThdSleepMilliseconds(waitTime + 10);
 
         if (s_BMP180.getTemperature(s_Temp) == 0) {
+#ifdef DEBUG
             Serial.println("BMP180 temp. error");
+#endif
             continue;
         }
 
         chThdSleepMilliseconds(400);
         waitTime = s_BMP180.startPressure(3);
         if (waitTime == 0) {
+#ifdef DEBUG
             Serial.println("BMP180 start pressure error");
+#endif
             continue;
         }
         chThdSleepMilliseconds(waitTime + 10);
 
         if (s_BMP180.getPressure(s_Pressure, s_Temp) == 0) {
+#ifdef DEBUG
             Serial.println("BMP180 pressure error");
+#endif
             continue;
         }
     }
@@ -79,5 +87,6 @@ double BMP180::getTemperature()
 
 double BMP180::getAltitude()
 {
-//s_BMP.altitude(s_Pressure, );
+// TODO: Calculate altitude from Temp. & Absolute pressure
+    return 0.0;
 }

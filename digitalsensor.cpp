@@ -8,8 +8,7 @@ DigitalSensor::DigitalSensor(byte pinNo, unsigned int debounceTime, bool activeL
     m_DebounceTime = debounceTime;
     m_ActiveLow = activeLow;
     m_PrevTime = 0;
-//     m_PrevState = false;
-    m_State = false;
+    m_State = activeLow;
     m_Debouncing = false;
     pinMode(m_PinNo, INPUT);
 }
@@ -21,11 +20,12 @@ DigitalSensor::~DigitalSensor()
 
 bool DigitalSensor::getValue()
 {
-    if (m_ActiveLow) {
-        return !m_State;
-    } else {
-        return m_State;
-    }
+//     if () {
+//         return !m_State;
+//     } else {
+//         return m_State;
+//     }
+    return (m_ActiveLow ? !m_State : m_State);
 }
 
 void DigitalSensor::update()

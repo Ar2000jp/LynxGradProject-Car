@@ -9,6 +9,7 @@ LEDs Debug::s_LEDs;
 Buzzer Debug::s_Buzzer;
 Alarm Debug::s_Alarm;
 Radio Debug::s_Radio;
+RTC Debug::s_RTC;
 
 Debug::Debug()
 {
@@ -31,11 +32,11 @@ void Debug::start()
     while (s_DebugMode == true) {
         param = 0;
 
-        chThdYield();
+        chThdSleepMilliseconds(100);
 
         // Process data from Serial
         if (Serial.available() < 1) {
-            chThdYield();
+            chThdSleepMilliseconds(100);
             continue;
         }
 
@@ -73,10 +74,25 @@ void Debug::start()
             Serial.println(param);
             break;
 
-        case 's':
+        case 't':
+            Serial.println("Setting time.");
+            s_RTC.setHours12(Serial.parseInt(), 0);
+            s_RTC.setMinutes(Serial.parseInt());
+            s_RTC.setSeconds(Serial.parseInt());
+            s_RTC.setPM(Serial.parseInt());
+            break;
+
+        case 'd':
+            Serial.println("Setting date.");
+            s_RTC.setYear(Serial.parseInt());
+            s_RTC.setMonth(Serial.parseInt());
+            s_RTC.setDay(Serial.parseInt());
+            break;
+
+        case 'w':
             param = Serial.parseInt();
-            Serial.println("Switching comm. system.");
-            s_Radio.switchCommSystem(param);
+            Serial.println("Setting day of week.");
+            s_RTC.setDayOfWeek(param);
             break;
 
         case 'q':
@@ -88,7 +104,7 @@ void Debug::start()
             Serial.println("Invalid command");
         }
 
-        chThdYield();
+        chThdSleepMilliseconds(100);
 
         // Drain buffer before looping.
         drainSerial();
@@ -104,6 +120,8 @@ void Debug::printHelp()
     Serial.println("b#\tBuzz buzzer using level #");
     Serial.println("g#\tBlink Green LED using level #");
     Serial.println("r#\tBlink Red LED using level #");
-    Serial.println("s#\tSwitch comm. system");
+    Serial.println("t# # # #\tSet time (Hours12 Minutes Seconds AMPM(PM = 1))");
+    Serial.println("d# # #\tSet date (Year Month Day)");
+    Serial.println("w#\tSet day of week");
     Serial.println("q\tExit debug mode");
 }

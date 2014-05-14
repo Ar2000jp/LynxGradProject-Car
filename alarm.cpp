@@ -47,7 +47,10 @@ void Alarm::setLevel(Alarm::AlarmLevel level)
         break;
 
     default:
+#ifdef DEBUG
         Serial.println("Invalid alarmLevel.");
+#endif
+        break;
     }
 }
 

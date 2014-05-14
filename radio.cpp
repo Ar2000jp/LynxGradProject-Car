@@ -26,32 +26,34 @@ Radio::~Radio()
 
 }
 
-void Radio::init()
+void Radio::init(byte commSysID)
 {
     if (s_Initialized == false) {
         s_Initialized = true;
+        s_CommSysID = commSysID;
 
-        if (s_RadioManager.init()) {
-            s_RadioManager.setTimeout(100);
-            s_RadioManager.setRetries(5);
+        if (s_CommSysID == 0) {
+            if (s_RadioManager.init()) {
+                s_RadioManager.setTimeout(100);
+                s_RadioManager.setRetries(5);
 
-            // Use a reasonable comm. speed
-            s_RadioDriver.setModemConfig(RH_RF22::FSK_Rb9_6Fd45);
+                // Use a reasonable comm. speed
+                s_RadioDriver.setModemConfig(RH_RF22::FSK_Rb9_6Fd45);
 
-            // Use max Tx power
-            s_RadioDriver.setTxPower(RH_RF22_TXPOW_20DBM);
+                // Use max Tx power
+                s_RadioDriver.setTxPower(RH_RF22_TXPOW_20DBM);
 
-            attachInterrupt(c_RadioInterruptNo, radioISR, FALLING); // Take over interrupts
+//             attachInterrupt(c_RadioInterruptNo, radioISR, FALLING); // Take over interrupts
+            } else {
+                Serial.println("Radio init failed. Switching to Serial1.");
+            }
         } else {
-            Serial.println("Radio init failed. Switching to Serial1.");
-            s_CommSysID = 1;
-        }
-
-        if (s_SerialManager.init()) {
-            s_SerialManager.setTimeout(100);
-            s_SerialManager.setRetries(5);
-        } else {
-            Serial.println("Serial1 init failed.");
+            if (s_SerialManager.init()) {
+                s_SerialManager.setTimeout(100);
+                s_SerialManager.setRetries(5);
+            } else {
+                Serial.println("Serial1 init failed.");
+            }
         }
     }
 }
@@ -111,11 +113,6 @@ bool Radio::recv(uint8_t* buf, uint8_t* bufLen)
     return true;
 }
 
-void Radio::switchCommSystem(byte sysID)
-{
-    s_CommSysID = sysID;
-}
-
 void Radio::radioISR()
 {
     s_RadioInterrupt = true;
@@ -128,7 +125,9 @@ void Radio::run()
             chThdSleepMilliseconds(10);
         } else {
             s_RadioInterrupt = false;
-            s_RadioDriver.handleInterrupt();
+//             lockSPI();
+//             s_RadioDriver.handleInterrupt();
+//             unlockSPI();
         }
     }
 }
@@ -137,12 +136,12 @@ void Radio::update()
 {
     if (s_RadioInterrupt == false) {
         chThdSleepMilliseconds(10);
-        Serial.print("Rf");
+        //Serial.print("Rf");
     } else {
         Serial.println("Rt");
         s_RadioInterrupt = false;
-        lockSPI();
-        s_RadioDriver.handleInterrupt();
-        unlockSPI();
+//         lockSPI();
+//         s_RadioDriver.handleInterrupt();
+//         unlockSPI();
     }
 }

@@ -9,10 +9,10 @@ public:
     Voltmeter();
     ~Voltmeter();
 
-private:
     void update();
     bool getUndervolt();
 
+private:
     static const byte c_VoltmeterPin = A0;
     static const unsigned int c_Threshold = 512;
     static const unsigned int c_DebounceTime = 2000;

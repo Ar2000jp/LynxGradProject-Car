@@ -6,22 +6,15 @@
 #include <RH_Serial.h>
 #include <RHReliableDatagram.h>
 
-// class MyRH_RF22 : protected RH_RF22 {
-// public:
-//   attachInterrupt
-//
-// };
-
 class Radio
 {
 public:
     Radio();
     ~Radio();
 
-    void init();
+    void init(byte commSysID);
     bool send(uint8_t* buf, uint8_t bufLen);
     bool recv(uint8_t* buf, uint8_t* bufLen);
-    void switchCommSystem(byte sysID);
     void run();
     void update();
 

@@ -27,13 +27,18 @@ void RTC::init()
         // verify connection
         if (s_RTC.testConnection() == false) {
             Serial.println("DS1307 connection failed");
-            //while (1);
+            while (1);
         }
 
         s_RTC.setSquareWaveRate(1); // 4kHz
 
         if (s_RTC.getClockRunning() != true) {
             s_RTC.setClockRunning(true);
+        }
+
+        // Switch to 12 Hour mode
+        if (s_RTC.getMode() != 1) {
+            s_RTC.setMode(1);
         }
 
         // Hardware bug workaround.
@@ -61,8 +66,9 @@ void RTC::init()
             delay(10);
             s_RTC.setClockRunning(true);
         }
-
+#ifdef DEBUG
         Serial.println("Unable to start RTC clock.");
+#endif
     }
 }
 
@@ -75,7 +81,7 @@ void RTC::setSQEnabled(bool state)
     s_RTC.setSquareWaveEnabled(state);
 }
 
-long unsigned int RTC::getTime()
+unsigned long RTC::getTime()
 {
     if (s_Initialized == false) {
         return 0;
@@ -83,7 +89,7 @@ long unsigned int RTC::getTime()
     return s_RTC.getSeconds();
 }
 
-void RTC::setTime(long unsigned int time)
+void RTC::setTime(unsigned long time)
 {
     if (s_Initialized == false) {
         return;
@@ -96,17 +102,17 @@ unsigned int RTC::getYear()
     return s_RTC.getYear();
 }
 
-unsigned int RTC::getMonth()
+byte RTC::getMonth()
 {
     return s_RTC.getMonth();
 }
 
-unsigned int RTC::getDay()
+byte RTC::getDay()
 {
     return s_RTC.getDay();
 }
 
-unsigned int RTC::getDayOfWeek()
+byte RTC::getDayOfWeek()
 {
     s_RTC.getDayOfWeek();
 }
@@ -116,17 +122,57 @@ bool RTC::getPM()
     return s_RTC.getAMPM();
 }
 
-unsigned int RTC::getHours12()
+byte RTC::getHours12()
 {
     return s_RTC.getHours12();
 }
 
-unsigned int RTC::getMinutes()
+byte RTC::getMinutes()
 {
     return s_RTC.getMinutes();
 }
 
-unsigned int RTC::getSeconds()
+byte RTC::getSeconds()
 {
     return s_RTC.getSeconds();
+}
+
+void RTC::setDayOfWeek(byte dayOfWeek)
+{
+    s_RTC.setDayOfWeek(dayOfWeek);
+}
+
+void RTC::setSeconds(byte seconds)
+{
+    s_RTC.setSeconds(seconds);
+}
+
+void RTC::setMinutes(byte minutes)
+{
+    s_RTC.setMinutes(minutes);
+}
+
+void RTC::setHours12(byte hours12, bool pm)
+{
+    s_RTC.setHours12(hours12, pm);
+}
+
+void RTC::setDay(byte day)
+{
+    s_RTC.setDay(day);
+}
+
+void RTC::setMonth(byte month)
+{
+    s_RTC.setMonth(month);
+}
+
+void RTC::setYear(unsigned int year)
+{
+    s_RTC.setYear(year);
+}
+
+void RTC::setPM(bool pm)
+{
+    s_RTC.setAMPM(pm);
 }

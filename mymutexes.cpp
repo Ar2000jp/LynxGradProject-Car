@@ -8,20 +8,20 @@ MUTEX_DECL(G_I2CMutex);
 
 void lockSPI()
 {
-    chMtxLock(&G_SPIMutex);
+//     chMtxLock(&G_SPIMutex);
 }
 
 void unlockSPI()
 {
-    chMtxUnlock();
+//     chMtxUnlock();
 }
 
 void lockI2C()
 {
-    chMtxLock(&G_I2CMutex);
+//     chMtxLock(&G_I2CMutex);
 }
 
 void unlockI2C()
 {
-    chMtxUnlock();
+//     chMtxUnlock();
 }

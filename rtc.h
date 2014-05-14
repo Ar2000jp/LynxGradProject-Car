@@ -15,15 +15,23 @@ public:
 
     void setSQEnabled(bool state);
 
-    unsigned long getTime();
     void setTime(unsigned long time);
+    void setSeconds(byte seconds);
+    void setMinutes(byte minutes);
+    void setHours12(byte hours12, bool pm);
+    void setDayOfWeek(byte dayOfWeek);
+    void setDay(byte day);
+    void setMonth(byte month);
+    void setYear(unsigned int year);
+    void setPM(bool pm);
 
-    unsigned int getSeconds();
-    unsigned int getMinutes();
-    unsigned int getHours12();
-    unsigned int getDayOfWeek();
-    unsigned int getDay();
-    unsigned int getMonth();
+    unsigned long getTime();
+    byte getSeconds();
+    byte getMinutes();
+    byte getHours12();
+    byte getDayOfWeek();
+    byte getDay();
+    byte getMonth();
     unsigned int getYear();
     bool getPM();
 

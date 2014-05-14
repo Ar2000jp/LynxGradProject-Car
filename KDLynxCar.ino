@@ -9,7 +9,6 @@
 #include <RH_RF22.h>
 #include <RHReliableDatagram.h>
 #include <ChibiOS_AVR.h>
-
 #include <Wire.h>
 #include <I2Cdev.h>
 #include <DS1307.h>
@@ -30,36 +29,39 @@
 #include "mymutexes.h"
 #include "voltmeter.h"
 
-// const byte c_I2CSCLPin = 21;
-// const byte c_I2CSDAPin = 20;
-
 const byte c_MQ7COPin = 15;
 const byte c_MQ2GasPin = 16;
 const byte c_RainPin = 14;
 const byte c_PIRPin = 13;//FIXME
 
-unsigned int G_PrevAlarmsState = 0;
-unsigned int G_AlarmsState = 0;
-
-const byte c_UnderVoltAlarm = 1;
-const byte c_RainAlarm = 2;
-const byte c_TemperatureAlarm = 3;
-const byte c_DistanceTooCloseAlarm = 4;
-const byte c_MotionAlarm = 5;
-const byte c_COAlarm = 6;
-const byte c_GasAlarm = 7;
-
-const byte c_DistanceTooClose = 30;
-
 // const byte c_nRadioSSPin = 53;
 // const byte c_nSDSSPin = ;
+
 const byte c_nLCDSSPin = 5;
 const byte c_nLCDResetPin = 4;
 const byte c_nLCDDCPin = 6;
 
-const unsigned int c_UpdateInterval = 5000;
-unsigned long G_LastUpdateTime = 0;
+const byte c_Window1Pin = 55;
+const byte c_Window2Pin = 56;
+
+const byte c_DoorLockPin = 57;
+
+const byte c_CarOnPin = 58;
+const byte c_CarReversePin = 59;
+
+const byte c_DistanceTooClose = 30;
+
+unsigned int G_PrevAlarmsState = 0;
+unsigned int G_AlarmsState = 0;
 byte G_AlarmID = 0;
+bool G_RemoteReachable = true;
+
+enum Alarms {c_UnderVoltAlarm = 1, c_RainAlarm, c_TemperatureAlarm,
+             c_DistanceTooCloseAlarm, c_MotionAlarm, c_COAlarm, c_GasAlarm
+            };
+
+const unsigned int c_RemoteUpdateInterval = 5000;
+unsigned long G_RemoteLastUpdateTime = 0;
 
 Alarm G_Alarm;
 Radio G_Radio;
@@ -69,7 +71,6 @@ LEDs G_LEDs;
 RTC G_RTC;
 BMP180 G_BMP180;
 LCD_ILI9341 G_LCD;
-// MPU6050 G_AccelGyro(0x69);
 USRangeSensor G_USRS;
 Voltmeter G_VM;
 
@@ -77,6 +78,8 @@ DigitalSensor G_GasSensor(c_MQ2GasPin, 2000);
 DigitalSensor G_COSensor(c_MQ7COPin, 2000);
 DigitalSensor G_RainSensor(c_RainPin, 2000, true);
 DigitalSensor G_PIRSensor(c_PIRPin, 2000);
+DigitalSensor G_CarOn(c_CarOnPin, 100);
+DigitalSensor G_CarReverse(c_CarReversePin, 100);
 
 char lcdCharArray[32];
 PString lcdString(lcdCharArray, sizeof(lcdCharArray));
@@ -120,113 +123,138 @@ static WORKING_AREA(waLCDThread, 256);
 
 static msg_t LCDThread(void* arg)
 {
+    byte prevSeconds = 0;
+    byte prevDay = 0;
+    double prevTemp = 0;
+    double prevPressure = 0;
+    byte prevDistance = 255;
+    unsigned int prevAlarmsState = 0;
+
     while (1) {
+        chThdSleepMilliseconds(50);
         // Print time
-        chThdSleepMilliseconds(100);
-        sprintf(lcdCharArray, "%02d:%02d:%02d %s", G_RTC.getHours12(),
-                G_RTC.getMinutes(), G_RTC.getSeconds(), (G_RTC.getPM() ? "PM" : "AM"));
+        if (G_RTC.getSeconds() != prevSeconds) {
+            prevSeconds = G_RTC.getSeconds();
 
-        lockSPI();
-        G_LCD.setCursor(100, 1);
-        G_LCD.print(lcdString);
-        unlockSPI();
+            sprintf(lcdCharArray, "%02d:%02d:%02d %s", G_RTC.getHours12(),
+                    G_RTC.getMinutes(), G_RTC.getSeconds(), (G_RTC.getPM() ? "PM" : "AM"));
 
+            lockSPI();
+            G_LCD.setCursor(100, 1);
+            G_LCD.print(lcdString);
+            unlockSPI();
+        }
+
+        chThdSleepMilliseconds(50);
         // Print day of week and date
-        chThdSleepMilliseconds(100);
-        lcdString.begin();
-        switch (G_RTC.getDayOfWeek()) {
-        case 0:
-            lcdString.print("Huh?");
-            break;
+        if (G_RTC.getDay() != prevDay) {
+            prevDay = G_RTC.getDay();
 
-        case 1:
-            lcdString.print("Sunday");
-            break;
+            lcdString.begin();
+            switch (G_RTC.getDayOfWeek()) {
+            case 0:
+                lcdString.print("Huh?");
+                break;
 
-        case 2:
-            lcdString.print("Monday");
-            break;
+            case 1:
+                lcdString.print("Sunday");
+                break;
 
-        case 3:
-            lcdString.print("Tuesday");
-            break;
+            case 2:
+                lcdString.print("Monday");
+                break;
 
-        case 4:
-            lcdString.print("Wednesday");
-            break;
+            case 3:
+                lcdString.print("Tuesday");
+                break;
 
-        case 5:
-            lcdString.print("Thursday");
-            break;
+            case 4:
+                lcdString.print("Wednesday");
+                break;
 
-        case 6:
-            lcdString.print("Friday");
-            break;
+            case 5:
+                lcdString.print("Thursday");
+                break;
 
-        case 7:
-            lcdString.print("Saturday");
-            break;
+            case 6:
+                lcdString.print("Friday");
+                break;
+
+            case 7:
+                lcdString.print("Saturday");
+                break;
+            }
+            lcdString.print("      "); // Clear some space for next part
+
+            sprintf(lcdCharArray + 10, "%02d/%02d/%02d", G_RTC.getDay(),
+                    G_RTC.getMonth(), G_RTC.getYear());
+
+            lockSPI();
+            G_LCD.setCursor(70, 4);
+            G_LCD.print(lcdString);
+            unlockSPI();
         }
-        lcdString.print("      "); // Clear some space for next part
 
-        sprintf(lcdCharArray + 10, "%02d/%02d/%02d", G_RTC.getDay(),
-                G_RTC.getMonth(), G_RTC.getYear());
-
-        lockSPI();
-        G_LCD.setCursor(70, 4);
-        G_LCD.print(lcdString);
-        unlockSPI();
-
+        chThdSleepMilliseconds(50);
         // Print temperature
-        chThdSleepMilliseconds(100);
+        if (G_BMP180.getTemperature() != prevTemp) {
+            prevTemp = G_BMP180.getTemperature();
 
-        lcdString.begin();
-        lcdString.print(G_BMP180.getTemperature(), 1);
-        lcdString += " C";
+            lcdString.begin();
+            lcdString.print(G_BMP180.getTemperature(), 1);
+            lcdString += " C";
 
-        lockSPI();
-        G_LCD.setCursor(60, 7);
-        G_LCD.print(lcdString);
-        unlockSPI();
+            lockSPI();
+            G_LCD.setCursor(60, 7);
+            G_LCD.print(lcdString);
+            unlockSPI();
+        }
 
+        chThdSleepMilliseconds(50);
         // Print pressure
-        chThdSleepMilliseconds(100);
+        if (G_BMP180.getPressure() != prevPressure) {
+            prevPressure = G_BMP180.getPressure();
 
-        lcdString.begin();
-        lcdString.print(G_BMP180.getPressure(), 1);
-        lcdString += " mbar";
+            lcdString.begin();
+            lcdString.print(G_BMP180.getPressure(), 1);
+            lcdString += " mbar";
 
-        lockSPI();
-        G_LCD.setCursor(180, 7);
-        G_LCD.print(lcdString);
-        unlockSPI();
+            lockSPI();
+            G_LCD.setCursor(180, 7);
+            G_LCD.print(lcdString);
+            unlockSPI();
+        }
 
+        chThdSleepMilliseconds(50);
         // Print distance from USRangeSensor on reverse
-        chThdSleepMilliseconds(100);
-        lcdString.begin();
+        if (G_USRS.getDistance() != prevDistance) {
+            prevDistance = G_USRS.getDistance();
 
-        if (G_RTC.getSeconds() % 2) {//TODO: use car reverse flag
-            lcdString = "Distance = ";
-            lcdString.print(G_USRS.getDistance());
-            lcdString += " cm    ";
-        } else {
-            lcdString.print("                        ");
+            lcdString.begin();
+
+            if (G_RTC.getSeconds() % 2) {//TODO: use car reverse flag
+                lcdString = "Distance = ";
+                lcdString.print(G_USRS.getDistance());
+                lcdString += " cm    ";
+            } else {
+                lcdString.print("                        ");
+            }
+
+            lockSPI();
+            if (G_USRS.getDistance() < c_DistanceTooClose) {
+                G_LCD.setTextColor(RGB16_RED);
+            }
+            G_LCD.setCursor(60, 10);
+            G_LCD.print(lcdString);
+            G_LCD.setTextColor(RGB16_WHITE);
+            unlockSPI();
         }
 
-        lockSPI();
-        if (G_USRS.getDistance() < c_DistanceTooClose) {
-            G_LCD.setTextColor(RGB16_RED);
-        }
-        G_LCD.setCursor(60, 10);
-        G_LCD.print(lcdString);
-        unlockSPI();
-
+        chThdSleepMilliseconds(50);
         // Print flashing red "Alarm!" if an alarm is raised
-        chThdSleepMilliseconds(100);
-
         lcdString.begin();
 
-        if ((G_AlarmsState > 0) && (G_RTC.getSeconds() % 2)) {
+        if ((G_AlarmsState != 0) && (G_RTC.getSeconds() % 2)) {
             lcdString.print("   Alarm! Alarm! Alarm!   ");
         } else {
             lcdString.print("                          ");
@@ -236,73 +264,82 @@ static msg_t LCDThread(void* arg)
         G_LCD.setCursor(40, 13);
         G_LCD.setTextColor(RGB16_RED);
         G_LCD.print(lcdString);
-        unlockSPI();
-
-        // Print alarms
-        chThdSleepMilliseconds(100);
-
-        // 1st line
-        lcdString.begin();
-        if (bitRead(G_AlarmsState, c_GasAlarm)) {
-            lcdString.print("Combustible Gas!  ");//18
-        } else {
-            lcdString.print("                  ");
-        }
-
-        lockSPI();
         G_LCD.setTextColor(RGB16_WHITE);
-        G_LCD.setCursor(2, 16);
-        G_LCD.print(lcdString);
         unlockSPI();
 
-        // 2nd line
-        lcdString.begin();
-        if (bitRead(G_AlarmsState, c_MotionAlarm)) {
-            lcdString.print("Motion detected!  ");//18
-        } else {
-            lcdString.print("                  ");
-        }
+        chThdSleepMilliseconds(50);
+        // Print alarms
+        if (G_AlarmsState != prevAlarmsState) {
+            prevAlarmsState = G_AlarmsState;
 
-        lockSPI();
-        G_LCD.setCursor(2, 19);
-        G_LCD.print(lcdString);
-        unlockSPI();
+            // 1st line
+            lcdString.begin();
+            if (bitRead(G_AlarmsState, c_GasAlarm)) {
+                lcdString.print("Combustible Gas!  ");//18
+            } else {
+                lcdString.print("                  ");
+            }
 
-        // 3rd line
-        lcdString.begin();
-        if (bitRead(G_AlarmsState, c_RainAlarm)) {
-            lcdString.print("Rain!  ");//7
-        } else {
-            lcdString.print("       ");
-        }
-        if (bitRead(G_AlarmsState, c_TemperatureAlarm)) {
-            lcdString.print("Temp. too high!  ");//17
-        } else {
-            lcdString.print("                 ");
-        }
+            lockSPI();
+            G_LCD.setCursor(2, 16);
+            G_LCD.print(lcdString);
+            unlockSPI();
 
-        lockSPI();
-        G_LCD.setCursor(2, 22);
-        G_LCD.print(lcdString);
-        unlockSPI();
+            chThdSleepMilliseconds(30);
+            // 2nd line
+            lcdString.begin();
+            if (bitRead(G_AlarmsState, c_MotionAlarm)) {
+                lcdString.print("Motion detected!  ");//18
+            } else {
+                lcdString.print("                  ");
+            }
 
-        // 4th line
-        lcdString.begin();
-        if (bitRead(G_AlarmsState, c_COAlarm)) {
-            lcdString.print("High CO level!  ");//16
-        } else {
-            lcdString.print("                ");
-        }
-        if (bitRead(G_AlarmsState, c_UnderVoltAlarm)) {
-            lcdString.print("Battery low!  ");//14
-        } else {
-            lcdString.print("              ");
-        }
+            lockSPI();
+            G_LCD.setCursor(2, 19);
+            G_LCD.print(lcdString);
+            unlockSPI();
 
-        lockSPI();
-        G_LCD.setCursor(2, 25);
-        G_LCD.print(lcdString);
-        unlockSPI();
+            chThdSleepMilliseconds(30);
+            // 3rd line
+            lcdString.begin();
+            if (bitRead(G_AlarmsState, c_RainAlarm)) {
+                lcdString.print("Rain!  ");//7
+            } else {
+                lcdString.print("       ");
+            }
+            if (bitRead(G_AlarmsState, c_TemperatureAlarm)) {
+                lcdString.print("Temp. too high!  ");//17
+            } else {
+                lcdString.print("                 ");
+            }
+
+            lockSPI();
+            G_LCD.setCursor(2, 22);
+            G_LCD.print(lcdString);
+            unlockSPI();
+
+            chThdSleepMilliseconds(30);
+            // 4th line
+            lcdString.begin();
+            if (bitRead(G_AlarmsState, c_COAlarm)) {
+                lcdString.print("High CO level!  ");//16
+            } else {
+                lcdString.print("                ");
+            }
+            if (bitRead(G_AlarmsState, c_UnderVoltAlarm)) {
+                lcdString.print("Battery low!  ");//14
+            } else {
+                lcdString.print("              ");
+            }
+
+            lockSPI();
+            G_LCD.setCursor(2, 25);
+            G_LCD.print(lcdString);
+            unlockSPI();
+        }
+#ifdef DEBUG
+        Serial.println("L");
+#endif
     }
 
     return 0;
@@ -320,7 +357,7 @@ static msg_t RadioThread(void* arg)
 
 void mainThread()
 {
-    // Start Red LED thread
+// Start Red LED thread
     chThdCreateStatic(waRedLEDThread, sizeof(waRedLEDThread),
                       NORMALPRIO, RedLEDThread, NULL);
 
@@ -333,26 +370,18 @@ void mainThread()
     chThdCreateStatic(waBMP180Thread, sizeof(waBMP180Thread),
                       NORMALPRIO, BMP180Thread, NULL);
 
-    chThdCreateStatic(waLCDThread, sizeof(waLCDThread),
-                      NORMALPRIO, LCDThread, NULL);
+//     chThdCreateStatic(waLCDThread, sizeof(waLCDThread),
+//                       NORMALPRIO, LCDThread, NULL);
 
     chThdCreateStatic(waRadioThread, sizeof(waRadioThread),
                       NORMALPRIO, RadioThread, NULL);
 
     while (1) {
 #ifdef DEBUG
-        Serial.print("M1");
+        Serial.print("M");
 #endif
 
-        //Serial.println(G_RTC.getTime());
-        //chThdSleepMilliseconds(100);
-        //Serial.println(G_BMP180.getPressure(), 2);
-        //Serial.print("M");
-
-//         chThdYield();//chThdSleepMilliseconds(100);
         chThdSleepMilliseconds(10);
-        Serial.print("M2");
-
         // Check for data on Serial
         if (Serial.available() > 0) {
             if (Serial.read() == 'd') {
@@ -362,21 +391,19 @@ void mainThread()
                 drainSerial();
             }
         }
-        Serial.print("M3");
-        chThdSleepMilliseconds(10);//         chThdYield();
-        Serial.print("M4");
 
+        chThdSleepMilliseconds(10);
         // Check for messages from radio
         bool result = false;
         G_RadioBufLen = sizeof(G_RadioBuf);
-        lockSPI();
-        Serial.print("M5");
+//         lockSPI();
+//         Serial.print("M5");
         result = G_Radio.recv(G_RadioBuf, &G_RadioBufLen);
-        Serial.print("M6");
-        unlockSPI();
-        Serial.print("M7");
+//         Serial.print("M6");
+//         unlockSPI();
+//         Serial.print("M7");
 
-        if (result) {
+        if (result) {//TODO: Finish key processing
             switch (G_RadioBuf[0]) {
             case 'c':
                 // Alarm! Next byte is alarm level
@@ -387,15 +414,13 @@ void mainThread()
                 Serial.println("Invalid message.");
             }
         }
-        Serial.print("M8");
-        chThdSleepMilliseconds(10);//         chThdYield();
-        Serial.print("M9");
 
+        chThdSleepMilliseconds(10);//         chThdYield();
         bitWrite(G_AlarmsState, c_GasAlarm, G_GasSensor.getValue());
         bitWrite(G_AlarmsState, c_COAlarm, G_COSensor.getValue());
         bitWrite(G_AlarmsState, c_MotionAlarm, G_PIRSensor.getValue());
         bitWrite(G_AlarmsState, c_RainAlarm, G_RainSensor.getValue());
-        bitWrite(G_AlarmsState, c_DistanceTooCloseAlarm, G_USRS.getDistance() <= c_DistanceTooClose);
+//         bitWrite(G_AlarmsState, c_DistanceTooCloseAlarm, G_USRS.getDistance() <= c_DistanceTooClose);//TODO: enable
         bitWrite(G_AlarmsState, c_UnderVoltAlarm, G_VM.getUndervolt());
 
         if (G_AlarmsState != G_PrevAlarmsState) {
@@ -406,7 +431,7 @@ void mainThread()
                 G_Alarm.setLevel(Alarm::AlarmFatal);
             } else if (G_AlarmsState >= 4) {
                 G_Alarm.setLevel(Alarm::AlarmDanger);
-            } else if (G_AlarmsState > 2) {
+            } else if (G_AlarmsState >= 2) {
                 G_Alarm.setLevel(Alarm::AlarmWarning);
             } else if (G_AlarmsState >= 1) {
                 G_Alarm.setLevel(Alarm::AlarmAttention);
@@ -414,63 +439,35 @@ void mainThread()
                 G_Alarm.setLevel(Alarm::AlarmOff);
             }
         }
-        Serial.print("M10");
-        chThdSleepMilliseconds(10);//         chThdYield();
-        Serial.print("M11");
-        if (millis() > (G_LastUpdateTime + c_UpdateInterval)) {
+
+        chThdSleepMilliseconds(10);
+        if (millis() > (G_RemoteLastUpdateTime + c_RemoteUpdateInterval)) {
             // Didn't send a status message in a while.
-            G_LastUpdateTime = millis();
+            G_RemoteLastUpdateTime = millis();
             //G_AlarmID++; //FIXME
             G_RadioBuf[0] = 's';
             G_RadioBuf[1] = G_AlarmID;
             G_RadioBuf[2] = G_Alarm.getLevel();
             G_LEDs.turnOn(LEDs::LEDGreen);
-            Serial.print("M12");
-            lockSPI();
-            Serial.print("M13");
+//             Serial.print("M12");
+//             lockSPI();
+//             Serial.print("M13");
             if (!G_Radio.send(G_RadioBuf, 3)) {
                 G_Alarm.raiseLevel(Alarm::AlarmRadioSignal);
             }
-            Serial.print("M14");
-            unlockSPI();
-            Serial.print("M15");
+//             Serial.print("M14");
+//             unlockSPI();
+//             Serial.print("M15");
             G_LEDs.turnOff(LEDs::LEDGreen);
         }
-        Serial.print("M16");
-        chThdSleepMilliseconds(10);//         chThdYield();
-        Serial.print("M17");
-        //if(G_USRS.getDistance() != 0)
-        {
-//             Serial.print("Distance: ");
-//             Serial.println(G_USRS.getDistance());
-            G_USRS.getDistance();
-        }
-        Serial.print("M18");
-        // If the 'F' key is pressed we lower the alarm level in the remote. Like a silence button.
-//         if (G_Key == 'F') {
-//             G_Alarm.lowerLevel(Alarm::AlarmAttention);
-//
-//             //TODO: Add code to check up on alarms with car
-//         } else {
-//             G_Alarm.setLevel((Alarm::AlarmLevel)(G_Key - '0'));
-//             // First byte is 'c', which means command. 2nd byte is the key code.
-//             G_RadioBuf[0] = 'c';
-//             G_RadioBuf[1] = G_Key;
-//             G_LEDs.turnOn(LEDs::LEDGreen);
-//             if (!G_Radio.send(G_RadioBuf, 2)) {
-//                 G_Alarm.raiseLevel(Alarm::AlarmRadioSignal);
-//             }
-//             G_LEDs.turnOff(LEDs::LEDGreen);
-//         }
 
         chThdSleepMilliseconds(10);//         chThdYield();
-        Serial.print("M19");
         G_GasSensor.update();
         G_COSensor.update();
         G_RainSensor.update();
         G_PIRSensor.update();
         G_USRS.update();
-        Serial.print("M20");
+        G_VM.update();
     }
 }
 
@@ -484,18 +481,14 @@ void setup()
     Serial1.begin(9600);
     Serial1.setTimeout(100);
 
-    pinMode(40, INPUT_PULLUP);
-    if (digitalRead(40) == false) {
-        G_Radio.switchCommSystem(1);
-    }
-
     // Init LCD
     G_LCD.begin();
     G_LCD.clear();
     G_LCD.setFont(FONT_SIZE_XLARGE);
 
     // Initialize Radio
-    G_Radio.init();
+    pinMode(40, INPUT_PULLUP);
+    G_Radio.init(digitalRead(40) == false); // Switch to Serial1 if pin 40 is low
 
     // Start I2C bus
     Wire.begin();
@@ -511,7 +504,9 @@ void setup()
     G_LEDs.setPattern(LEDs::LEDGreen, LEDs::Blink2ShortStop);
     G_LEDs.setPattern(LEDs::LEDRed, LEDs::Blink2ShortStop);
 
+#ifdef DEBUG
     Serial.println("Send 'd' to enter debug mode.");
+#endif
 
     // start ChibiOS
     chBegin(mainThread);
