@@ -370,8 +370,8 @@ void mainThread()
     chThdCreateStatic(waBMP180Thread, sizeof(waBMP180Thread),
                       NORMALPRIO, BMP180Thread, NULL);
 
-//     chThdCreateStatic(waLCDThread, sizeof(waLCDThread),
-//                       NORMALPRIO, LCDThread, NULL);
+    chThdCreateStatic(waLCDThread, sizeof(waLCDThread),
+                      NORMALPRIO, LCDThread, NULL);
 
     chThdCreateStatic(waRadioThread, sizeof(waRadioThread),
                       NORMALPRIO, RadioThread, NULL);
@@ -396,11 +396,11 @@ void mainThread()
         // Check for messages from radio
         bool result = false;
         G_RadioBufLen = sizeof(G_RadioBuf);
-//         lockSPI();
+        lockSPI();
 //         Serial.print("M5");
         result = G_Radio.recv(G_RadioBuf, &G_RadioBufLen);
 //         Serial.print("M6");
-//         unlockSPI();
+        unlockSPI();
 //         Serial.print("M7");
 
         if (result) {//TODO: Finish key processing
@@ -450,13 +450,13 @@ void mainThread()
             G_RadioBuf[2] = G_Alarm.getLevel();
             G_LEDs.turnOn(LEDs::LEDGreen);
 //             Serial.print("M12");
-//             lockSPI();
+            lockSPI();
 //             Serial.print("M13");
             if (!G_Radio.send(G_RadioBuf, 3)) {
                 G_Alarm.raiseLevel(Alarm::AlarmRadioSignal);
             }
 //             Serial.print("M14");
-//             unlockSPI();
+            unlockSPI();
 //             Serial.print("M15");
             G_LEDs.turnOff(LEDs::LEDGreen);
         }

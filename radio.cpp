@@ -43,7 +43,7 @@ void Radio::init(byte commSysID)
                 // Use max Tx power
                 s_RadioDriver.setTxPower(RH_RF22_TXPOW_20DBM);
 
-//             attachInterrupt(c_RadioInterruptNo, radioISR, FALLING); // Take over interrupts
+                attachInterrupt(c_RadioInterruptNo, radioISR, FALLING); // Take over interrupts
             } else {
                 Serial.println("Radio init failed. Switching to Serial1.");
             }
@@ -126,7 +126,7 @@ void Radio::run()
         } else {
             s_RadioInterrupt = false;
 //             lockSPI();
-//             s_RadioDriver.handleInterrupt();
+            s_RadioDriver.handleInterrupt();
 //             unlockSPI();
         }
     }
@@ -136,12 +136,12 @@ void Radio::update()
 {
     if (s_RadioInterrupt == false) {
         chThdSleepMilliseconds(10);
-        //Serial.print("Rf");
+        Serial.print("Rf");
     } else {
         Serial.println("Rt");
         s_RadioInterrupt = false;
-//         lockSPI();
-//         s_RadioDriver.handleInterrupt();
-//         unlockSPI();
+        lockSPI();
+        s_RadioDriver.handleInterrupt();
+        unlockSPI();
     }
 }
