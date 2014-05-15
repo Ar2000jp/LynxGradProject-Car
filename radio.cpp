@@ -35,7 +35,7 @@ void Radio::init(byte commSysID)
         if (s_CommSysID == 0) {
             if (s_RadioManager.init()) {
                 s_RadioManager.setTimeout(100);
-                s_RadioManager.setRetries(5);
+                s_RadioManager.setRetries(2);
 
                 // Use a reasonable comm. speed
                 s_RadioDriver.setModemConfig(RH_RF22::FSK_Rb9_6Fd45);
@@ -62,17 +62,25 @@ bool Radio::send(uint8_t* buf, uint8_t bufLen)
 {
     if (s_CommSysID == 0) {
         if (!s_RadioManager.sendtoWait(buf, bufLen, c_RCAddress)) {
+#ifdef DEBUG
             Serial.println("sendtoWait failed");
+#endif
             return false;
         } else {
+#ifdef DEBUG
             Serial.println("sendtoWait succeeded");
+#endif
         }
     } else {
         if (!s_SerialManager.sendtoWait(buf, bufLen, c_RCAddress)) {
+#ifdef DEBUG
             Serial.println("sendtoWait failed");
+#endif
             return false;
         } else {
+#ifdef DEBUG
             Serial.println("sendtoWait succeeded");
+#endif
         }
     }
 
@@ -101,10 +109,12 @@ bool Radio::recv(uint8_t* buf, uint8_t* bufLen)
         }
     }
 
+#ifdef DEBUG
     Serial.print("got msg from : 0x");
     Serial.print(from, HEX);
     Serial.print(": ");
     Serial.println((char*)buf);
+#endif
 
     if (from != c_RCAddress) {
         return false;
@@ -118,30 +128,22 @@ void Radio::radioISR()
     s_RadioInterrupt = true;
 }
 
-void Radio::run()
-{
-    while (1) {
-        if (s_RadioInterrupt == false) {
-            chThdSleepMilliseconds(10);
-        } else {
-            s_RadioInterrupt = false;
-//             lockSPI();
-            s_RadioDriver.handleInterrupt();
-//             unlockSPI();
-        }
-    }
-}
-
 void Radio::update()
 {
     if (s_RadioInterrupt == false) {
-        chThdSleepMilliseconds(10);
-        Serial.print("Rf");
+        chThdSleepMilliseconds(1);
+
+#ifdef DEBUG
+        Serial.print("RIf");
+#endif
     } else {
-        Serial.println("Rt");
-        s_RadioInterrupt = false;
         lockSPI();
+        s_RadioInterrupt = false;
         s_RadioDriver.handleInterrupt();
         unlockSPI();
+
+#ifdef DEBUG
+        Serial.println("RIt");
+#endif
     }
 }

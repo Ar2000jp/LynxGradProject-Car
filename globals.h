@@ -5,7 +5,7 @@
 //#define CH_TIME_QUANTUM 0
 
 // Enable Debug messages on Serial port
-#define DEBUG
+//#define DEBUG
 
 
 #endif

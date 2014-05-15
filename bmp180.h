@@ -14,7 +14,6 @@ public:
     void run();
     double getTemperature();
     double getPressure();
-    double getAltitude();
 
 private:
     static bool s_Initialized;

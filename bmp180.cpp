@@ -35,11 +35,11 @@ void BMP180::run()
 
     while (1) {
         if (s_Initialized == false) {
-            chThdSleepMilliseconds(400);
+            chThdSleepMilliseconds(2000);
             continue;
         }
 
-        chThdSleepMilliseconds(400);
+        chThdSleepMilliseconds(2000);
         waitTime = s_BMP180.startTemperature();
         if (waitTime == 0) {
 #ifdef DEBUG
@@ -83,10 +83,4 @@ double BMP180::getPressure()
 double BMP180::getTemperature()
 {
     return s_Temp;
-}
-
-double BMP180::getAltitude()
-{
-// TODO: Calculate altitude from Temp. & Absolute pressure
-    return 0.0;
 }

@@ -65,7 +65,9 @@ unsigned long G_RemoteLastUpdateTime = 0;
 
 Alarm G_Alarm;
 Radio G_Radio;
+#ifdef DEBUG
 Debug G_Debug;
+#endif
 Buzzer G_Buzzer;
 LEDs G_LEDs;
 RTC G_RTC;
@@ -119,11 +121,22 @@ static msg_t BMP180Thread(void* arg)
     return 0;
 }
 
+// byte pStringLen = 0;
+// void lcdPrint(PString pString){
+//   pStringLen = pString.length();
+//   for (int i = 0; i < pStringLen; i++){
+//     lockSPI();
+//     G_LCD.write(pString[i]);
+//     unlockSPI();
+//   }
+// }
+
 static WORKING_AREA(waLCDThread, 256);
 
 static msg_t LCDThread(void* arg)
 {
     byte prevSeconds = 0;
+    byte prevMinutes = 0;
     byte prevDay = 0;
     double prevTemp = 0;
     double prevPressure = 0;
@@ -132,15 +145,27 @@ static msg_t LCDThread(void* arg)
 
     while (1) {
         chThdSleepMilliseconds(50);
-        // Print time
-        if (G_RTC.getSeconds() != prevSeconds) {
-            prevSeconds = G_RTC.getSeconds();
+        // Print the rest of the time
+        if (G_RTC.getMinutes() != prevMinutes) {
+            prevMinutes = G_RTC.getMinutes();
 
-            sprintf(lcdCharArray, "%02d:%02d:%02d %s", G_RTC.getHours12(),
-                    G_RTC.getMinutes(), G_RTC.getSeconds(), (G_RTC.getPM() ? "PM" : "AM"));
+            sprintf(lcdCharArray, "%02d:%02d:   %s", G_RTC.getHours12(),
+                    G_RTC.getMinutes(), (G_RTC.getPM() ? "PM" : "AM"));
 
             lockSPI();
             G_LCD.setCursor(100, 1);
+            G_LCD.print(lcdString);
+            unlockSPI();
+        }
+
+        // Print seconds from time.
+        if (G_RTC.getSeconds() != prevSeconds) {
+            prevSeconds = G_RTC.getSeconds();
+
+            sprintf(lcdCharArray, "%02d", G_RTC.getSeconds());
+
+            lockSPI();
+            G_LCD.setCursor(153, 1);
             G_LCD.print(lcdString);
             unlockSPI();
         }
@@ -345,7 +370,7 @@ static msg_t LCDThread(void* arg)
     return 0;
 }
 
-static WORKING_AREA(waRadioThread, 128);
+static WORKING_AREA(waRadioThread, 256);
 
 static msg_t RadioThread(void* arg)
 {
@@ -381,6 +406,7 @@ void mainThread()
         Serial.print("M");
 #endif
 
+#ifdef DEBUG
         chThdSleepMilliseconds(10);
         // Check for data on Serial
         if (Serial.available() > 0) {
@@ -391,17 +417,24 @@ void mainThread()
                 drainSerial();
             }
         }
+#endif
 
         chThdSleepMilliseconds(10);
         // Check for messages from radio
         bool result = false;
         G_RadioBufLen = sizeof(G_RadioBuf);
         lockSPI();
-//         Serial.print("M5");
+#ifdef DEBUG
+        Serial.print("M5");
+#endif
         result = G_Radio.recv(G_RadioBuf, &G_RadioBufLen);
-//         Serial.print("M6");
+#ifdef DEBUG
+        Serial.print("M6");
+#endif
         unlockSPI();
-//         Serial.print("M7");
+#ifdef DEBUG
+        Serial.print("M7");
+#endif
 
         if (result) {//TODO: Finish key processing
             switch (G_RadioBuf[0]) {
@@ -411,7 +444,10 @@ void mainThread()
                 break;
 
             default:
+#ifdef DEBUG
                 Serial.println("Invalid message.");
+#endif
+                break;
             }
         }
 
@@ -449,15 +485,23 @@ void mainThread()
             G_RadioBuf[1] = G_AlarmID;
             G_RadioBuf[2] = G_Alarm.getLevel();
             G_LEDs.turnOn(LEDs::LEDGreen);
-//             Serial.print("M12");
+#ifdef DEBUG
+            Serial.print("M12");
+#endif
             lockSPI();
-//             Serial.print("M13");
+#ifdef DEBUG
+            Serial.print("M13");
+#endif
             if (!G_Radio.send(G_RadioBuf, 3)) {
                 G_Alarm.raiseLevel(Alarm::AlarmRadioSignal);
             }
-//             Serial.print("M14");
+#ifdef DEBUG
+            Serial.print("M14");
+#endif
             unlockSPI();
-//             Serial.print("M15");
+#ifdef DEBUG
+            Serial.print("M15");
+#endif
             G_LEDs.turnOff(LEDs::LEDGreen);
         }
 

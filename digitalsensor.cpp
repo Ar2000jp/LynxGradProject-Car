@@ -20,12 +20,11 @@ DigitalSensor::~DigitalSensor()
 
 bool DigitalSensor::getValue()
 {
-//     if () {
-//         return !m_State;
-//     } else {
-//         return m_State;
-//     }
-    return (m_ActiveLow ? !m_State : m_State);
+    if (m_ActiveLow) {
+        return !m_State;
+    } else {
+        return m_State;
+    }
 }
 
 void DigitalSensor::update()
