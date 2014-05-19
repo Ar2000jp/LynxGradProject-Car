@@ -28,46 +28,49 @@
 #include "usrangesensor.h"
 #include "mymutexes.h"
 #include "voltmeter.h"
+#include "windowcontroller.h"
+#include "doorcontroller.h"
 
 const byte c_MQ7COPin = 15;
 const byte c_MQ2GasPin = 16;
 const byte c_RainPin = 14;
-const byte c_PIRPin = 13;//FIXME
-
-// const byte c_nRadioSSPin = 53;
-// const byte c_nSDSSPin = ;
+const byte c_PIRPin = A8;
 
 const byte c_nLCDSSPin = 5;
 const byte c_nLCDResetPin = 4;
 const byte c_nLCDDCPin = 6;
 
-const byte c_Window1Pin = 55;
-const byte c_Window2Pin = 56;
+const byte c_WindowOnPin = A2;
+const byte c_WindowDirPin = A3;
 
-const byte c_DoorLockPin = 57;
+const byte c_CarOnPin = 34;
+const byte c_CarReversePin = 35;
 
-const byte c_CarOnPin = 58;
-const byte c_CarReversePin = 59;
-
+const byte c_DistanceVeryClose = 60;
 const byte c_DistanceTooClose = 30;
 
 unsigned int G_PrevAlarmsState = 0;
 unsigned int G_AlarmsState = 0;
+// unsigned int G_PrevLCDAlarmsState = 0;
+unsigned int G_LCDAlarmsState = 0;
 byte G_AlarmID = 0;
-bool G_RemoteReachable = true;
+// bool G_AlarmsSilenced = false;
+//bool G_RemoteReachable = true;
 
-enum Alarms {c_UnderVoltAlarm = 1, c_RainAlarm, c_TemperatureAlarm,
+enum Alarms {c_UnderVoltAlarm = 1, c_RainAlarm, c_TemperatureAlarm, c_DistanceVeryCloseAlarm,
              c_DistanceTooCloseAlarm, c_MotionAlarm, c_COAlarm, c_GasAlarm
             };
 
-const unsigned int c_RemoteUpdateInterval = 5000;
+const unsigned int c_RemoteUpdateInterval = 3000;
 unsigned long G_RemoteLastUpdateTime = 0;
 
-Alarm G_Alarm;
-Radio G_Radio;
+
 #ifdef DEBUG
 Debug G_Debug;
 #endif
+
+Alarm G_Alarm;
+Radio G_Radio;
 Buzzer G_Buzzer;
 LEDs G_LEDs;
 RTC G_RTC;
@@ -75,9 +78,11 @@ BMP180 G_BMP180;
 LCD_ILI9341 G_LCD;
 USRangeSensor G_USRS;
 Voltmeter G_VM;
+WindowController G_WinC(c_WindowOnPin, c_WindowDirPin, 1000);
+DoorController G_DoorController;
 
-DigitalSensor G_GasSensor(c_MQ2GasPin, 2000);
-DigitalSensor G_COSensor(c_MQ7COPin, 2000);
+DigitalSensor G_GasSensor(c_MQ2GasPin, 2000, true);
+DigitalSensor G_COSensor(c_MQ7COPin, 2000, true);
 DigitalSensor G_RainSensor(c_RainPin, 2000, true);
 DigitalSensor G_PIRSensor(c_PIRPin, 2000);
 DigitalSensor G_CarOn(c_CarOnPin, 100);
@@ -121,27 +126,18 @@ static msg_t BMP180Thread(void* arg)
     return 0;
 }
 
-// byte pStringLen = 0;
-// void lcdPrint(PString pString){
-//   pStringLen = pString.length();
-//   for (int i = 0; i < pStringLen; i++){
-//     lockSPI();
-//     G_LCD.write(pString[i]);
-//     unlockSPI();
-//   }
-// }
-
 static WORKING_AREA(waLCDThread, 256);
 
 static msg_t LCDThread(void* arg)
 {
-    byte prevSeconds = 0;
-    byte prevMinutes = 0;
-    byte prevDay = 0;
-    double prevTemp = 0;
-    double prevPressure = 0;
+    byte prevSeconds = 200;
+    byte prevMinutes = 200;
+    byte prevDay = 200;
+    double prevTemp = 2000;
+    double prevPressure = 2000;
     byte prevDistance = 255;
-    unsigned int prevAlarmsState = 0;
+    bool prevReverse = false;
+    unsigned int prevLCDAlarmsState = 0;
 
     while (1) {
         chThdSleepMilliseconds(50);
@@ -252,27 +248,42 @@ static msg_t LCDThread(void* arg)
 
         chThdSleepMilliseconds(50);
         // Print distance from USRangeSensor on reverse
-        if (G_USRS.getDistance() != prevDistance) {
-            prevDistance = G_USRS.getDistance();
+        if ((G_CarOn.getValue() == true) && (G_CarReverse.getValue() == true)) {
+            prevReverse = true;
+            if (G_USRS.getDistance() != prevDistance) {
+                prevDistance = G_USRS.getDistance();
 
-            lcdString.begin();
+                lcdString.begin();
 
-            if (G_RTC.getSeconds() % 2) {//TODO: use car reverse flag
                 lcdString = "Distance = ";
-                lcdString.print(G_USRS.getDistance());
+                if (G_USRS.getDistance() > 150) {
+                    lcdString += "???";
+                } else {
+                    lcdString.print(G_USRS.getDistance());
+                }
                 lcdString += " cm    ";
-            } else {
-                lcdString.print("                        ");
-            }
 
-            lockSPI();
-            if (G_USRS.getDistance() < c_DistanceTooClose) {
-                G_LCD.setTextColor(RGB16_RED);
+                lockSPI();
+                if (G_USRS.getDistance() < c_DistanceTooClose) {
+                    G_LCD.setTextColor(RGB16_RED);
+                }
+                G_LCD.setCursor(60, 10);
+                G_LCD.print(lcdString);
+                G_LCD.setTextColor(RGB16_WHITE);
+                unlockSPI();
             }
-            G_LCD.setCursor(60, 10);
-            G_LCD.print(lcdString);
-            G_LCD.setTextColor(RGB16_WHITE);
-            unlockSPI();
+        } else {
+            if (prevReverse == true) {
+                prevReverse = false;
+
+                lcdString.begin();
+                lcdString.print("                        ");
+
+                lockSPI();
+                G_LCD.setCursor(60, 10);
+                G_LCD.print(lcdString);
+                unlockSPI();
+            }
         }
 
         chThdSleepMilliseconds(50);
@@ -294,12 +305,12 @@ static msg_t LCDThread(void* arg)
 
         chThdSleepMilliseconds(50);
         // Print alarms
-        if (G_AlarmsState != prevAlarmsState) {
-            prevAlarmsState = G_AlarmsState;
+        if (G_LCDAlarmsState != prevLCDAlarmsState) {
+            prevLCDAlarmsState = G_LCDAlarmsState;
 
             // 1st line
             lcdString.begin();
-            if (bitRead(G_AlarmsState, c_GasAlarm)) {
+            if (bitRead(G_LCDAlarmsState, c_GasAlarm)) {
                 lcdString.print("Combustible Gas!  ");//18
             } else {
                 lcdString.print("                  ");
@@ -313,7 +324,7 @@ static msg_t LCDThread(void* arg)
             chThdSleepMilliseconds(30);
             // 2nd line
             lcdString.begin();
-            if (bitRead(G_AlarmsState, c_MotionAlarm)) {
+            if (bitRead(G_LCDAlarmsState, c_MotionAlarm)) {
                 lcdString.print("Motion detected!  ");//18
             } else {
                 lcdString.print("                  ");
@@ -327,12 +338,12 @@ static msg_t LCDThread(void* arg)
             chThdSleepMilliseconds(30);
             // 3rd line
             lcdString.begin();
-            if (bitRead(G_AlarmsState, c_RainAlarm)) {
+            if (bitRead(G_LCDAlarmsState, c_RainAlarm)) {
                 lcdString.print("Rain!  ");//7
             } else {
                 lcdString.print("       ");
             }
-            if (bitRead(G_AlarmsState, c_TemperatureAlarm)) {
+            if (bitRead(G_LCDAlarmsState, c_TemperatureAlarm)) {
                 lcdString.print("Temp. too high!  ");//17
             } else {
                 lcdString.print("                 ");
@@ -346,12 +357,12 @@ static msg_t LCDThread(void* arg)
             chThdSleepMilliseconds(30);
             // 4th line
             lcdString.begin();
-            if (bitRead(G_AlarmsState, c_COAlarm)) {
+            if (bitRead(G_LCDAlarmsState, c_COAlarm)) {
                 lcdString.print("High CO level!  ");//16
             } else {
                 lcdString.print("                ");
             }
-            if (bitRead(G_AlarmsState, c_UnderVoltAlarm)) {
+            if (bitRead(G_LCDAlarmsState, c_UnderVoltAlarm)) {
                 lcdString.print("Battery low!  ");//14
             } else {
                 lcdString.print("              ");
@@ -436,42 +447,116 @@ void mainThread()
         Serial.print("M7");
 #endif
 
-        if (result) {//TODO: Finish key processing
-            switch (G_RadioBuf[0]) {
-            case 'c':
-                // Alarm! Next byte is alarm level
-                G_Alarm.setLevel((Alarm::AlarmLevel)(G_RadioBuf[1] - '0'));
+        // Got a message from the remote, and it's a command.
+        if (result && (G_RadioBuf[0] == 'c')) {
+            switch (G_RadioBuf[1]) {
+            case '0':
+                //Open Doors
+                G_DoorController.open();
                 break;
 
-            default:
-#ifdef DEBUG
-                Serial.println("Invalid message.");
-#endif
+            case '1':
+                // Close doors
+                G_DoorController.close();
+                break;
+
+            case '4':
+                // Open Windows
+                if (G_CarOn.getValue() == true) {
+                    G_WinC.open();
+                }
+                break;
+
+            case '5':
+                // Close Windows
+                G_WinC.close();
+                break;
+
+            case 'C':
+                if ((G_GasSensor.getValue() == false) && (G_COSensor.getValue() == false)) {
+                    G_Alarm.lowerLevel(Alarm::AlarmAttention);
+                }
+                break;
+
+            case 'D':
+                G_Alarm.setLevel(Alarm::AlarmOff);
+                G_AlarmsState = 0;
+                G_PrevAlarmsState = 1;
+                G_LCDAlarmsState = 0;
                 break;
             }
         }
+#ifdef DEBUG
+        else {
+            Serial.println("Invalid message.");
+        }
+#endif
 
-        chThdSleepMilliseconds(10);//         chThdYield();
-        bitWrite(G_AlarmsState, c_GasAlarm, G_GasSensor.getValue());
-        bitWrite(G_AlarmsState, c_COAlarm, G_COSensor.getValue());
-        bitWrite(G_AlarmsState, c_MotionAlarm, G_PIRSensor.getValue());
-        bitWrite(G_AlarmsState, c_RainAlarm, G_RainSensor.getValue());
-//         bitWrite(G_AlarmsState, c_DistanceTooCloseAlarm, G_USRS.getDistance() <= c_DistanceTooClose);//TODO: enable
+        chThdSleepMilliseconds(10);
+        if (G_GasSensor.getValue() == true) {
+            bitSet(G_AlarmsState, c_GasAlarm);
+            G_WinC.open();
+        }
+
+        if (G_COSensor.getValue() == true) {
+            bitSet(G_AlarmsState, c_COAlarm);
+            G_WinC.open();
+        }
+
+        if ((G_CarOn.getValue() == false) && (G_DoorController.getOpen() == false) && (G_PIRSensor.getValue() == true)) {
+            bitSet(G_AlarmsState, c_MotionAlarm);
+        }
+        if ((G_CarOn.getValue() == true) || (G_DoorController.getOpen() == true)) {
+            bitClear(G_AlarmsState, c_MotionAlarm);
+        }
+
+        if ((G_CarOn.getValue() == false) && (G_WinC.getOpen() == true) && (G_RainSensor.getValue() == true)) {
+            bitSet(G_AlarmsState, c_RainAlarm);
+            G_WinC.close();
+        }
+
+        if ((G_CarOn.getValue() == true) && (G_CarReverse.getValue() == true)) {
+            if (G_USRS.getDistance() <= c_DistanceTooClose) {
+                bitSet(G_AlarmsState, c_DistanceTooCloseAlarm);
+                bitClear(G_AlarmsState, c_DistanceVeryCloseAlarm);
+            } else if (G_USRS.getDistance() <= c_DistanceVeryClose) {
+                bitSet(G_AlarmsState, c_DistanceVeryCloseAlarm);
+                bitClear(G_AlarmsState, c_DistanceTooCloseAlarm);
+            } else {
+                bitClear(G_AlarmsState, c_DistanceVeryCloseAlarm);
+                bitClear(G_AlarmsState, c_DistanceTooCloseAlarm);
+            }
+        } else {
+            bitClear(G_AlarmsState, c_DistanceVeryCloseAlarm);
+            bitClear(G_AlarmsState, c_DistanceTooCloseAlarm);
+        }
+
         bitWrite(G_AlarmsState, c_UnderVoltAlarm, G_VM.getUndervolt());
 
+        // Copy only extra alarms
+        G_LCDAlarmsState |= G_AlarmsState;
+
+        // Process new alarms
         if (G_AlarmsState != G_PrevAlarmsState) {
             G_PrevAlarmsState = G_AlarmsState;
+            // Increment Alarm ID if alarm state changed. Remote only sounds on new alarm IDs.
             G_AlarmID++;
+//             G_AlarmsSilenced = false;//TODO: Silencing alarms
 
-            if (G_AlarmsState >= 8) {
+            // Map alarms to alarm levels
+            if (bitRead(G_AlarmsState, c_GasAlarm) || bitRead(G_AlarmsState, c_COAlarm)) {
                 G_Alarm.setLevel(Alarm::AlarmFatal);
-            } else if (G_AlarmsState >= 4) {
+                G_Alarm.disableAutoSilence();
+            } else if (bitRead(G_AlarmsState, c_MotionAlarm) || bitRead(G_AlarmsState, c_DistanceTooCloseAlarm)) {
                 G_Alarm.setLevel(Alarm::AlarmDanger);
-            } else if (G_AlarmsState >= 2) {
+                G_Alarm.enableAutoSilence();
+            } else if (bitRead(G_AlarmsState, c_RainAlarm) || bitRead(G_AlarmsState, c_DistanceVeryCloseAlarm)) {
                 G_Alarm.setLevel(Alarm::AlarmWarning);
-            } else if (G_AlarmsState >= 1) {
+                G_Alarm.enableAutoSilence();
+            } else if (bitRead(G_AlarmsState, c_UnderVoltAlarm)) {
                 G_Alarm.setLevel(Alarm::AlarmAttention);
-            } else if (G_AlarmsState == 0) {
+                G_Alarm.enableAutoSilence();
+            } else {
                 G_Alarm.setLevel(Alarm::AlarmOff);
             }
         }
@@ -480,11 +565,16 @@ void mainThread()
         if (millis() > (G_RemoteLastUpdateTime + c_RemoteUpdateInterval)) {
             // Didn't send a status message in a while.
             G_RemoteLastUpdateTime = millis();
-            //G_AlarmID++; //FIXME
             G_RadioBuf[0] = 's';
-            G_RadioBuf[1] = G_AlarmID;
-            G_RadioBuf[2] = G_Alarm.getLevel();
-            G_LEDs.turnOn(LEDs::LEDGreen);
+            if (G_CarOn.getValue() == true) {
+                G_AlarmID++;
+                G_RadioBuf[1] = (uint8_t) Alarm::AlarmOff;
+            } else {
+                G_RadioBuf[1] = G_Alarm.getLevel();
+            }
+            G_RadioBuf[2] = G_AlarmID;
+            G_RadioBuf[3] = 'm';
+//            G_LEDs.turnOn(LEDs::LEDGreen);
 #ifdef DEBUG
             Serial.print("M12");
 #endif
@@ -492,8 +582,8 @@ void mainThread()
 #ifdef DEBUG
             Serial.print("M13");
 #endif
-            if (!G_Radio.send(G_RadioBuf, 3)) {
-                G_Alarm.raiseLevel(Alarm::AlarmRadioSignal);
+            if (!G_Radio.send(G_RadioBuf, 4)) {
+//                 G_Alarm.raiseLevel(Alarm::AlarmRadioSignal);
             }
 #ifdef DEBUG
             Serial.print("M14");
@@ -502,16 +592,25 @@ void mainThread()
 #ifdef DEBUG
             Serial.print("M15");
 #endif
-            G_LEDs.turnOff(LEDs::LEDGreen);
+//            G_LEDs.turnOff(LEDs::LEDGreen);
         }
 
-        chThdSleepMilliseconds(10);//         chThdYield();
+        chThdSleepMilliseconds(10);
         G_GasSensor.update();
         G_COSensor.update();
         G_RainSensor.update();
         G_PIRSensor.update();
-        G_USRS.update();
+        G_CarOn.update();
+        G_CarReverse.update();
+        G_DoorController.update();
+        G_Alarm.update();
         G_VM.update();
+        G_WinC.update();
+
+        // Only update USRangeSensor on reverse
+        if ((G_CarOn.getValue() == true) && (G_CarReverse.getValue() == true)) {
+            G_USRS.update();
+        }
     }
 }
 

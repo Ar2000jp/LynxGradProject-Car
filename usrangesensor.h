@@ -18,8 +18,10 @@ private:
     static bool s_Initialized;
     static byte s_Distance;
     static unsigned long s_Duration;
-    static const byte c_TrigPin = 36;
-    static const byte c_EchoPin = 37;
+    static const byte c_TrigPin = A6;
+    static const byte c_EchoPin = A7;
+    static unsigned long s_PrevUpdateTime;
+    static const unsigned int c_UpdateInterval = 1000;
 
 };
 

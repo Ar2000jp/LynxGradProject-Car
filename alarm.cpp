@@ -1,6 +1,8 @@
 #include "alarm.h"
 
 Alarm::AlarmLevel Alarm::s_AlarmLevel = Alarm::AlarmOff;
+unsigned long Alarm::s_LastAlarmTime = 0;
+bool Alarm::s_AutoSilence = false;
 
 Alarm::Alarm()
 {
@@ -14,6 +16,12 @@ Alarm::~Alarm()
 
 void Alarm::setLevel(Alarm::AlarmLevel level)
 {
+    s_LastAlarmTime = millis();
+
+    if (s_AlarmLevel == level) {
+        return;
+    }
+
     s_AlarmLevel = level;
     switch (level) {
     case 0:
@@ -61,6 +69,7 @@ Alarm::AlarmLevel Alarm::getLevel()
 
 void Alarm::raiseLevel(Alarm::AlarmLevel level)
 {
+    s_LastAlarmTime = millis();
     if (getLevel() < level) {
         setLevel(level);
     }
@@ -68,7 +77,26 @@ void Alarm::raiseLevel(Alarm::AlarmLevel level)
 
 void Alarm::lowerLevel(Alarm::AlarmLevel level)
 {
+    s_LastAlarmTime = millis();
     if (getLevel() > level) {
         setLevel(level);
+    }
+}
+
+void Alarm::disableAutoSilence()
+{
+    s_AutoSilence = false;
+}
+
+void Alarm::enableAutoSilence()
+{
+    s_AutoSilence = true;
+    s_LastAlarmTime = millis();
+}
+
+void Alarm::update()
+{
+    if ((s_AlarmLevel > AlarmAttention) && (s_AutoSilence == true) && (millis() >= s_LastAlarmTime + c_AutoSilenceDelay)) {
+        setLevel(AlarmAttention);
     }
 }
