@@ -495,12 +495,10 @@ void mainThread()
         chThdSleepMilliseconds(10);
         if (G_GasSensor.getValue() == true) {
             bitSet(G_AlarmsState, c_GasAlarm);
-            G_WinC.open();
         }
 
         if (G_COSensor.getValue() == true) {
             bitSet(G_AlarmsState, c_COAlarm);
-            G_WinC.open();
         }
 
         if ((G_CarOn.getValue() == false) && (G_DoorController.getOpen() == false) && (G_PIRSensor.getValue() == true)) {
@@ -512,7 +510,6 @@ void mainThread()
 
         if ((G_CarOn.getValue() == false) && (G_WinC.getOpen() == true) && (G_RainSensor.getValue() == true)) {
             bitSet(G_AlarmsState, c_RainAlarm);
-            G_WinC.close();
         }
 
         if ((G_CarOn.getValue() == true) && (G_CarReverse.getValue() == true)) {
@@ -558,6 +555,12 @@ void mainThread()
                 G_Alarm.enableAutoSilence();
             } else {
                 G_Alarm.setLevel(Alarm::AlarmOff);
+            }
+
+            if (bitRead(G_AlarmsState, c_GasAlarm) || bitRead(G_AlarmsState, c_COAlarm)) {
+                G_WinC.open();
+            } else if (bitRead(G_AlarmsState, c_RainAlarm)) {
+                G_WinC.close();
             }
         }
 
