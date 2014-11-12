@@ -1,0 +1,44 @@
+Copyright (C) 2014 Ahmad Draidi
+E-Mail: ar2000jp@gmail.com
+Please see the source code files for license details.
+
+LynxGradProject is the code for the graduation project of Team Lynx.
+This code is released as is, without clean-up, and with all the workarounds,
+    bugs, quick hacks, and whatever was needed for the deadline to be met.
+
+Team Lynx members:-
+    Shaheen Habash, Rawan Abdelqader, Raya Al-Wardat, Aya Al-Falahat,
+	and Ahmad Draidi.
+
+Video of the prototype:
+    http://www.youtube.com/watch?v=3rlm_BETZO8
+
+Project title: Car Protection and Control System
+
+This project is a prototype made solely for the purpose of demonstrating our
+    abilities as a team. Therefore, the design is, admittidly, not practical
+    in a real-world setting. Designing the system for a practical use-case
+    would have either over-simplified it, or made it financially impossible
+    for us.
+
+The code base contains 2000+ lines of C++ code, plus a few patches to several
+    libraries used. Many optimizations and techniques were needed to make the
+    hardware work within the available processing power and hardware
+    capabilities, like Multi-Threading, and thread yield timing optimizations.
+
+The hardware consists of several sensors, some of which have real-time
+    requirements (Ultrasonic range sensor), plus many other parts, like
+    an RTC, and 2-way ISM band RF digital radios (Si4432 based).
+
+Some of the challenges we faced during the project were bugs in software
+    libraries, bugs in hardware devices (ICs), and the limited resources
+    we had at hand during development.
+
+The project development time was ~20 days, from the beginning of design
+    to delivery.
+
+My (Ahmad Draidi) responsibilities included:
+1- Designing, implementing, optimizing, troubleshooting and testing all of 
+    the system's software.
+2- Designing, implementing, troubleshooting and testing part of the hardware.
+3- Electronic parts selection and procurement.
